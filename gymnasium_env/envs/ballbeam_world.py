@@ -31,7 +31,7 @@ class ballbeamEnv(gym.Env):
         self.weight = (self.m1 + self.m2) * self.g # Weight of the Ball and Beam
         self.phi_threshold_degrees = 35 # Maximum angle of the beam
         self.s_threshold = self.L/2 # Maximum distance of the ball from the beam center
-        self.Goal_y = 10
+        self.Goal_y = 20
         high = np.array([ 
                         20., # y
                         20., # yd    
@@ -100,19 +100,19 @@ class ballbeamEnv(gym.Env):
             reward -= 100.0
         if angle_out:
             reward -= 100.0
-        
-        self.return_so_far += reward # Update return
-        terminated = bool(success or ball_off_beam or angle_out) # Termination condition
-        truncated = bool(timeout and not terminated) # Truncation condition
+         # Update return
+        self.return_so_far += reward
+        # Termination condition
+        terminated = bool(success or ball_off_beam or angle_out) 
+        # Truncation condition
+        truncated = bool(timeout and not terminated) 
 
         if self.render_mode == "human":
             self.render()
 
         info = {
             "is_success": bool(success),
-           # you can also pass back the raw y or return_so_far if you like:
-           # "y": y,
-            # "return_so_far": self.return_so_far,
+
         }
         return self.state.astype(np.float32).copy(), reward, terminated, truncated, info
     

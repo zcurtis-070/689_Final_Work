@@ -7,17 +7,17 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 
-# — your custom name for easy file management —
-Log_Name = "PPO_BallBeam_1e-3lr_128steps_64batch_0.99gamma_yenc_longer"
+# Log name for ease
+Log_Name = "PPO_BallBeam_20m"
 
-# 1) Register your custom Gymnasium env
+# Register Environment TODO create package and install locally
 gym.register(
     id="gymnasium_env/BallBeamWorld-v0",
     entry_point="gymnasium_env.envs:ballbeamEnv",
     max_episode_steps=1200,
 )
 
-# 2) Prepare log directories using Log_Name
+# Create directories for logging
 LOG_DIR         = "./logs/monitor/"
 TENSORBOARD_DIR = f"./logs/ensorboard/"
 PLOT_DIR        = f"./logs/plots/"
@@ -27,42 +27,55 @@ EVAL_LOG_DIR    = f"./logs/eval_logs/"
 for d in (LOG_DIR, TENSORBOARD_DIR, PLOT_DIR, BEST_MODEL_DIR, EVAL_LOG_DIR):
     os.makedirs(d, exist_ok=True)
 
-# 3) Make a vectorized, Monitor-wrapped environment
+# Create training environment
 env = make_vec_env(
     "gymnasium_env/BallBeamWorld-v0",
     n_envs=4,
     monitor_dir=LOG_DIR,
 )
 
-# 4) Callback to collect loss & reward per episode and save rolling-avg plots
+# Custom callback to plot loss and reward
 class LossRewardCallback(BaseCallback):
     def __init__(self, save_dir: str, rolling_window: int = 100, verbose=0):
         super().__init__(verbose)
+        # Setup save directory
         self.save_dir       = save_dir
+        # setup up rolling window size
         self.rolling_window = rolling_window
+        # Create save directory if it doesn't exist
         os.makedirs(self.save_dir, exist_ok=True)
-
+        # Initialize lists to store episode data
         self.ep_count            = 0
         self.ep_idxs             = []
         self.ep_rewards          = []
         self.loss_idxs           = []
         self.ep_losses           = []
 
+    # What happens at the end of each training step
     def _on_step(self) -> bool:
+        # Check if the training step is at the end of an episode
         for info in self.locals.get("infos", []):
+            # Check if the episode is done
             if "episode" in info:
+                # Increment episode count and store rewards
                 self.ep_count += 1
+                # get reward from the info dict
                 r = info["episode"]["r"]
+                # count episodes
                 self.ep_idxs.append(self.ep_count)
+                # Store the episode reward
                 self.ep_rewards.append(r)
+                # get the training loss from the logger
                 l = self.logger.name_to_value.get("train/loss")
+                # save the loss if it exists
                 if l is not None:
                     self.loss_idxs.append(self.ep_count)
                     self.ep_losses.append(l)
         return True
 
+    # When training ends, plot the data
     def _on_training_end(self) -> None:
-        # — Loss vs Episodes —
+        # Plot loss vs episodes
         plt.figure(figsize=(8,4))
         plt.plot(self.loss_idxs, self.ep_losses, '-')
         plt.xlabel("Episode")
@@ -73,12 +86,14 @@ class LossRewardCallback(BaseCallback):
         plt.tight_layout(); plt.savefig(fp); plt.close()
         print(f"Saved loss plot to {fp}")
 
-        # — Reward vs Episodes + Rolling Avg —
+        # create array of rewards and episode indices
         rewards  = np.array(self.ep_rewards)
         episodes = np.array(self.ep_idxs)
+        # plot raw return
         plt.figure(figsize=(8,4))
         plt.plot(episodes, rewards, alpha=0.3, label="Raw return")
 
+        # plot smoothed return
         if len(rewards) >= self.rolling_window:
             kernel = np.ones(self.rolling_window) / self.rolling_window
             ma = np.convolve(rewards, kernel, mode='valid')
@@ -86,6 +101,7 @@ class LossRewardCallback(BaseCallback):
             plt.plot(ma_eps, ma, color='C1',
                      label=f"{self.rolling_window}-ep MA")
 
+        # plot mean return
         mean_r = rewards.mean() if rewards.size else 0.0
         plt.hlines(mean_r, episodes[0], episodes[-1],
                    linestyles='--', colors='C2',
@@ -100,9 +116,10 @@ class LossRewardCallback(BaseCallback):
         plt.tight_layout(); plt.savefig(fp); plt.close()
         print(f"Saved reward plot to {fp}")
 
-# 5) Instantiate callbacks
+# use the custom callback
 plot_cb = LossRewardCallback(save_dir=PLOT_DIR, rolling_window=100)
 
+# setup evaluation environment
 eval_env = gym.make("gymnasium_env/BallBeamWorld-v0")
 eval_callback = EvalCallback(
     eval_env,
@@ -113,7 +130,7 @@ eval_callback = EvalCallback(
     deterministic=True,
 )
 
-# 6) Build and train the PPO model
+# setup PPO model
 model = PPO(
     policy="MlpPolicy",
     env=env,
@@ -125,12 +142,13 @@ model = PPO(
     tensorboard_log=TENSORBOARD_DIR,
 )
 
+# train the model
 model.learn(
     total_timesteps=800_000,
     tb_log_name=Log_Name,
     callback=[plot_cb, eval_callback],
 )
 
-# 7) Save final model
+# Save final model. Not necassary, but useful for later
 model.save(Log_Name)
 print(f"Training complete. Saved model as {Log_Name}.zip")

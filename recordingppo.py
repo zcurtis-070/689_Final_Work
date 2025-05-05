@@ -6,40 +6,44 @@ import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 import math
 
+# Register Environment TODO create package and install locally
 gym.register(
     id="gymnasium_env/BallBeamWorld-v0",
     entry_point="gymnasium_env.envs:ballbeamEnv",
 )
+# load model
 model = PPO.load("logs/best_model/best_model.zip")
 
-
+# make environment
 env = gym.make("gymnasium_env/BallBeamWorld-v0", render_mode="rgb_array")
+# unwrap to access attributes
 base = env.unwrapped
+# reset environment
 obs, _ = env.reset()
 
-
+# set up video writer
+dt = base.dt
 writer = imageio.get_writer(
-    "ppo_ballbeam_deltay_minus_abs_s.mp4",
-    fps=env.metadata["render_fps"],
+    "ppo_ballbeam_best_model_longer.mp4",
+    fps=int(1/dt*10),
     codec="libx264",
 )
 
-
+# set up lists to record data
 states  = []
 actions = []
 times   = []
 
-
-dt = base.dt
+# get base force for plotting
 base = base.weight/2
-# L = base.r
 t  = 0.0
 
-
+# store initial state
 states.append(obs.copy())
+# store initial time
 times.append(t)
 
-
+# Loop unitl the episode is done
 done = False
 while not done:
     # get action
@@ -57,27 +61,23 @@ while not done:
     # write video frame
     frame = env.render()
     writer.append_data(frame)
-    time.sleep(1/100)
-
 
 writer.close()
 env.close()
 print("Wrote video to ppo_ballbeam_adjusted.mp4")
 
-
+# store as array for plotting
 all_states = np.array(states)  
 actions    = np.array(actions)  
 times      = np.array(times)    
 
-
+# pull states we want to plot
 sel_states  = all_states[:, [0, 2, 4]]
 state_names = ["y", "phi", "s"]
 action_names = ["F1", "F2"]
 
 
 action_times = times[1:]
-
-
 n_states = len(state_names)
 fig, axes = plt.subplots(n_states+1, 1, sharex=True, figsize=(10, 2*(n_states+1)))
 
